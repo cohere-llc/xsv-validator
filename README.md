@@ -12,13 +12,13 @@ CSV/TSV Validator CLI tool: Normalize and validate a TSV/CSV file using qsv
 ./xsv-validate.sh <input_file> <schema.json> [options]
 ```
 
-## Arguments:
+#### Arguments:
 ```
    <input_file>     Path to the CSV or TSV file to validate
    <schema.json>    Path to (or URL of) a JSONschema file
 ```
 
-## Options:
+#### Options:
 ```
    --skip-lines N   Number of header/preamble lines to skip (default: 0)
    --comment CHAR   Comment character to strip (default: #)
@@ -26,7 +26,7 @@ CSV/TSV Validator CLI tool: Normalize and validate a TSV/CSV file using qsv
    --keep-temp      Keep intermediate temporary files for debugging
    -h, --help       Show this help message
 ```
-## Outputs (written alongside `<input_file>`):
+#### Outputs (written alongside `<input_file>`):
 ```
    <input_file>.valid                 - Rows that passed validation
    <input_file>.invalid               - Rows that failed validation
