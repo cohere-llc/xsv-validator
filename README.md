@@ -5,11 +5,9 @@
 
 CSV/TSV Validator CLI tool: Normalize and validate a TSV/CSV file using qsv
 
-# Usage:
-#
+## Usage
 
-# Basic Usage
-
+### Basic Usage
 ```sh
 ./xsv-validate.sh <input_file> <schema.json> [options]
 ```
