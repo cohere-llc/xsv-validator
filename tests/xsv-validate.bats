@@ -313,5 +313,7 @@ assert_null_token_replaced() {
 
 @test ".invalid file retains the header row" {
     local f; f="$(copy_fixture mixed.csv)"
-    run "${SCRIPT}" "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}"
+    assert_failure 1
+    assert_file_contains "${f}.invalid" "id,name,email,age"
 }
