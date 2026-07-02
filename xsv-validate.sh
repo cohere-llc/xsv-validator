@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# xsv-validate.sh — Normalize and validate a TSV/CSV file using qsv
+#
+# Usage:
+#   ./xsv-validate.sh <input_file> <schema.json> [options]
+#
+# Arguments:
+#   <input_file>     Path to the CSV or TSV file to validate
+#   <schema.json>    Path to (or URL of) a JSONschema file
+#
+# Options:
+#   --skip-lines N   Number of header/preamble lines to skip (default: 0)
+#   --comment CHAR   Comment character to strip (default: #)
+#   --delimiter SEP  Field delimiter: 'tab' or any single char (default: auto-detect)
+#   --keep-temp      Keep intermediate temporary files for debugging
+#   -h, --help       Show this help message
+#
+# Outputs (written alongside <input_file>):
+#   <input_file>.valid                 - Rows that passed validation
+#   <input_file>.invalid               - Rows that failed validation
+#   <input_file>.validation-errors.tsv - Detailed per-field error report
+# -----------------------------------------------------------------------------
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# helpers
+# -----------------------------------------------------------------------------
+
+usage() {
+    sed -n '3,/^# ----/p' "$0" | sed 's/^# \?//'
+    exit "${1:-0}"
+}
+
+info()  { printf '\033[1;34m[INFO]\033[0m  %s\n' "$*" >&2; }
+warn()  { printf '\033[1;33m[WARN]\033[0m  %s\n' "$*" >&2; }
+error() { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+
+cleanup() {
+    if [[ "${KEEP_TEMP:-0}" == "0" && -n "${TMPDIR_WORK:-}" && -d "${TMPDIR_WORK}" ]]; then
+        rm -rf "${TMPDIR_WORK}"
+    fi
+}
+trap cleanup EXIT
+
+# -----------------------------------------------------------------------------
+# dependency check
+# -----------------------------------------------------------------------------
+
+command -v qsv &>/dev/null || error "qsv is not installed or not on PATH. See https://github.com/dathere/qsv"
+
+# -----------------------------------------------------------------------------
+# argument parsing
+# -----------------------------------------------------------------------------
+
+INPUT_FILE=""
+SCHEMA=""
+SKIP_LINES=0
+COMMENT_CHAR="#"
+DELIMITER=""      # empty = auto-detect
+KEEP_TEMP=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)       usage 0 ;;
+        --skip-lines)    SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
+        --comment)       COMMENT_CHAR="${2:?'--comment requires a value'}";  shift 2 ;;
+        --delimiter)     DELIMITER="${2:?'--delimiter requires a value'}";   shift 2 ;;
+        --keep-temp)     KEEP_TEMP=1; shift ;;
+        -*)              error "Unknown option: $1" ;;
+        *)
+            if   [[ -z "${INPUT_FILE}" ]]; then INPUT_FILE="$1"
+            elif [[ -z "${SCHEMA}"     ]]; then SCHEMA="$1"
+            else error "Unexpected argument: $1"
+            fi
+            shift ;;
+    esac
+done
+
+[[ -n "${INPUT_FILE}" ]] || error "No input file supplied. Run with --help for usage."
+[[ -n "${SCHEMA}"     ]] || error "No JSONschema supplied. Run with --help for usage."
+[[ -f "${INPUT_FILE}" ]] || error "Input file not found: ${INPUT_FILE}"
+
+# Schema may be a local file or a URL - only check existence for local paths
+if [[ "${SCHEMA}" != http* ]]; then
+    [[ -f "${SCHEMA}" ]] || error "Schema file not found: ${SCHEMA}"
+fi
+
+# -----------------------------------------------------------------------------
+# resolve delimiter flag
+# -----------------------------------------------------------------------------
+
+DELIM_FLAG=()
+if [[ -n "${DELIMITER}" ]]; then
+    if [[ "${DELIMITER}" == "tab" || "${DELIMITER}" == $'\t' ]]; then
+        DELIM_FLAG=(--delimiter $'\t')
+    else
+        DELIM_FLAG=(--delimiter "${DELIMITER}")
+    fi
+else
+    # Auto-detect: treat .tsv files as tab-delimited; otherwise sniff via qsv
+    if [[ "${INPUT_FILE,,}" == *.tsv ]]; then
+        DELIM_FLAG=(--delimiter $'\t')
+    fi
+    # If still empty, qsv will default to comma — fine for .csv
+fi
+
+# -----------------------------------------------------------------------------
+# working directory
+# -----------------------------------------------------------------------------
+
+TMPDIR_WORK=$(mktemp -d)
+NORMALIZED="${TMPDIR_WORK}/normalized.csv"
+
+info "Input file : ${INPUT_FILE}"
+info "Schema     : ${SCHEMA}"
+info "Temp dir   : ${TMPDIR_WORK}"
+
+# -----------------------------------------------------------------------------
+# STEP 1: Normalize with qsv input
+#   --comment         skip lines beginning with the comment character
+#   --trim-headers    strip surrounding whitespace from header names
+#   --trim-fields     strip surrounding whitespace from every field value
+#   --encoding-errors replace invalid UTF-8 sequences with the replacement char
+#   --skip-lines N    skip N non-comment preamble/header lines before the CSV header
+# -----------------------------------------------------------------------------
+
+info "Step 1/3: Normalizing input (comments, whitespace, encoding)..."
+
+qsv input \
+    "${DELIM_FLAG[@]}" \
+    --comment "${COMMENT_CHAR}" \
+    --trim-headers \
+    --trim-fields \
+    --encoding-errors replace \
+    $( (( SKIP_LINES > 0 )) && echo "--skip-lines ${SKIP_LINES}" ) \
+    "${INPUT_FILE}" \
+    --output "${NORMALIZED}"
+
+info "           -> wrote $(qsv count "${NORMALIZED}") data rows to normalized file"
+
+# -----------------------------------------------------------------------------
+# STEP 2: Null-value replacement with qsv replace
+#
+# Pattern covers common null representations:
+#   • Bare words : NULL, null, Null, NA, N/A, na, n/a, None, none,
+#                  NaN, nan, NIL, nil, missing, MISSING, unknown, UNKNOWN
+#   • Punctuation: -  --  ---  ...  ..
+#   • Quoted      : already empty after trim; the pattern also catches
+#                   strings that were literally written as "" or ''
+#
+# The regex is anchored (^ ...$) so it only matches cells whose *entire*
+# content is one of these tokens - partial matches are left untouched.
+# Replacement is the empty string, making the cell truly empty for the
+# JSON Schema "required" / "minLength" checks.
+# -----------------------------------------------------------------------------
+
+info "Step 2/3: Replacing null-like values with empty string..."
+
+NULL_PATTERN='^([Nn][Uu][Ll][Ll]|[Nn][Aa][Nn]|[Nn][Ii][Ll]|[Nn][Oo][Nn][Ee]|[Nn][/]?[Aa]|[Mm][Ii][Ss][Ss][Ii][Nn][Gg]|[Uu][Nn][Kk][Nn][Oo][Ww][Nn]|-{1,3}|\.{2,3}|""|'"''"')$'
+
+NULL_REPLACED="${TMPDIR_WORK}/null_replaced.csv"
+
+qsv replace \
+    --select '1-' \
+    "${NULL_PATTERN}" \
+    '' \
+    "${NORMALIZED}" \
+    --output "${NULL_REPLACED}" \
+    --not-one
+
+info "           -> null replacement complete"
+
+# -----------------------------------------------------------------------------
+# STEP 3: Validate against the JSONschema
+#
+# qsv validate produces three sibling files next to the output path:
+#   .valid                 - every row that passed
+#   .invalid               - every row that failed
+#   .validation-errors.tsv - row_number / field / error for each failure
+#
+# We direct output to a file in the temp dir then copy results back so the
+# report files sit alongside the *original* input file, which is more useful.
+# -----------------------------------------------------------------------------
+
+info "Step 3/3: Validating against schema: ${SCHEMA}..."
+
+VALIDATE_OUT="${TMPDIR_WORK}/validated.csv"
+cp ${NULL_REPLACED} ${VALIDATE_OUT}
+
+# qsv validate exit codes: 0 = all valid, 1 = some invalid, other = error
+set +e
+qsv validate \
+    "${VALIDATE_OUT}" \
+    "${SCHEMA}" \
+    2>&1
+VALIDATE_EXIT=$?
+set -e
+
+# -----------------------------------------------------------------------------
+# collect and report results
+# -----------------------------------------------------------------------------
+
+BASE="${INPUT_FILE}"
+
+# copy out results
+case "${VALIDATE_EXIT}" in
+    0)
+        src="${TMPDIR_WORK}/validated.csv"
+        [[ -f "${src}" ]] && cp "${src}" "${BASE}.valid"
+        ;;
+    1)
+        for ext in valid invalid "validation-errors.tsv"; do
+            src="${TMPDIR_WORK}/validated.csv.${ext}"
+            [[ -f "${src}" ]] && cp "${src}" "${BASE}.${ext}"
+        done
+        ;;
+esac
+
+echo ""
+case "${VALIDATE_EXIT}" in
+    0)
+        info "✅  All records are VALID."
+        ;;
+    1)
+        INVALID_COUNT=$(qsv count "${BASE}.invalid" 2>/dev/null || echo "?")
+        VALID_COUNT=$(qsv count "${BASE}.valid"   2>/dev/null || echo "?")
+        warn "⚠️   Validation complete with errors."
+        warn "    Valid rows   : ${VALID_COUNT}"
+        warn "    Invalid rows : ${INVALID_COUNT}"
+        info "Output files:"
+        info "    ${BASE}.valid"
+        info "    ${BASE}.invalid"
+        info "    ${BASE}.validation-errors.tsv"
+        ;;
+    *)
+        error "qsv validate exited with unexpected code ${VALIDATE_EXIT}. Check schema and input."
+        ;;
+esac
+
+exit "${VALIDATE_EXIT}"
