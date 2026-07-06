@@ -172,13 +172,20 @@ info "Temp dir   : ${TMPDIR_WORK}"
 
 info "Step 1/3: Normalizing input (comments, whitespace, encoding)..."
 
+SKIP_FLAG=()
+if [[ "${SKIP_LINES}" =~ ^[0-9]+$ ]] && (( SKIP_LINES > 0 )); then
+    SKIP_FLAG=(--skip-lines "${SKIP_LINES}")
+elif [[ "${SKIP_LINES}" != "0" ]]; then
+    error "--skip-lines must be a non-negative integer"
+fi
+
 qsv input \
     "${DELIM_FLAG[@]}" \
     --comment "${COMMENT_CHAR}" \
     --trim-headers \
     --trim-fields \
     --encoding-errors replace \
-    $( (( SKIP_LINES > 0 )) && echo "--skip-lines ${SKIP_LINES}" ) \
+    "${SKIP_FLAG[@]}" \
     "${INPUT_FILE}" \
     --output "${NORMALIZED}"
 
