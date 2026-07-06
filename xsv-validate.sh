@@ -14,6 +14,7 @@
 #   --delimiter SEP    Field delimiter: 'tab' or any single char (default: auto-detect)
 #   -h, --help         Show this help message
 #   --keep-temp        Keep intermediate temporary files for debugging
+#   --null STRING      String to treat as a null value (multiple allowed; default: common set of strings)
 #   -o, --output PATH  Relative path to output folder. Will be created if needed. (default: .)
 #   --skip-lines N     Number of header/preamble lines to skip (default: 0)
 #
@@ -44,6 +45,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
+regex_clean() {
+    local temp="$1" result=""
+    for (( i=0; i<${#temp}; i++ )); do
+        case "${temp:$i:1}" in
+            '.') result="${result}\." ;;
+            '^') result="${result}\^" ;;
+            '$') result="${result}\\\$" ;;
+            '*') result="${result}\*" ;;
+            '+') result="${result}\+" ;;
+            '(') result="${result}\(" ;;
+            ')') result="${result}\)" ;;
+            '[') result="${result}\[" ;;
+            '{') result="${result}\{" ;;
+            '\') result="${result}\\\\" ;;
+            '|') result="${result}\|" ;;
+            *) result="${result}${temp:$i:1}"
+        esac
+    done
+    echo "${result}"
+}
+
 # -----------------------------------------------------------------------------
 # dependency check
 # -----------------------------------------------------------------------------
@@ -61,6 +83,7 @@ COMMENT_CHAR="#"
 DELIMITER=""      # empty = auto-detect
 KEEP_TEMP=0
 OUTPUT_PATH="."
+REGEX_NULL=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -68,6 +91,9 @@ while [[ $# -gt 0 ]]; do
         --delimiter)     DELIMITER="${2:?'--delimiter requires a value'}";   shift 2 ;;
         -h|--help)       usage 0 ;;
         --keep-temp)     KEEP_TEMP=1; shift ;;
+        --null)
+            REGEX_NULL="${REGEX_NULL}$(regex_clean "${2:?'--null requires a value'}")|"
+            shift 2 ;;
         -o|--output)     OUTPUT_PATH="${2:?'--output requires a value'}";    shift 2 ;;
         --skip-lines)    SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
         -*)              error "Unknown option: $1" ;;
@@ -91,6 +117,9 @@ fi
 
 # strip trailing `/` from the output path
 while [[ "${OUTPUT_PATH}" == */ ]]; do OUTPUT_PATH="${OUTPUT_PATH%/}"; done
+
+# strip trailing `||` from the regex null string
+if [[ -n "${REGEX_NULL}" ]]; then REGEX_NULL="${REGEX_NULL%\|}"; fi
 
 # -----------------------------------------------------------------------------
 # resolve delimiter flag
@@ -163,7 +192,11 @@ info "           -> wrote $(qsv count "${NORMALIZED}") data rows to normalized f
 
 info "Step 2/3: Replacing null-like values with empty string..."
 
-NULL_PATTERN='^([Nn][Uu][Ll][Ll]|[Nn][Aa][Nn]|[Nn][Ii][Ll]|[Nn][Oo][Nn][Ee]|[Nn][/]?[Aa]|[Mm][Ii][Ss][Ss][Ii][Nn][Gg]|[Uu][Nn][Kk][Nn][Oo][Ww][Nn]|-{1,3}|\.{2,3}|""|'"''"')$'
+if [[ -z "${REGEX_NULL}" ]]; then
+    NULL_PATTERN='^([Nn][Uu][Ll][Ll]|[Nn][Aa][Nn]|[Nn][Ii][Ll]|[Nn][Oo][Nn][Ee]|[Nn][/]?[Aa]|[Mm][Ii][Ss][Ss][Ii][Nn][Gg]|[Uu][Nn][Kk][Nn][Oo][Ww][Nn]|-{1,3}|\.{2,3}|""|'"''"')$'
+else
+    NULL_PATTERN="^(${REGEX_NULL})\$"
+fi
 
 NULL_REPLACED="${TMPDIR_WORK}/null_replaced.csv"
 
@@ -173,7 +206,8 @@ qsv replace \
     '' \
     "${NORMALIZED}" \
     --output "${NULL_REPLACED}" \
-    --not-one
+    --not-one \
+    -i
 
 info "           -> null replacement complete"
 

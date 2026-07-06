@@ -361,3 +361,79 @@ assert_null_token_replaced() {
     assert_success
     assert_file_exists "${outdir}/valid.csv.valid"
 }
+
+# =============================================================================
+# 8. --null: user-provided null strings
+# =============================================================================
+
+@test "--null treats a custom string as null (row becomes invalid)" {
+    local f="${TEST_TMPDIR}/custom_null.csv"
+    printf 'id,name,email,age\n1,SENTINEL,alice@example.com,30\n' > "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null SENTINEL
+    assert_failure 1
+    assert_file_exists "${f}.invalid"
+}
+
+@test "--null requires a value" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null
+    assert_failure
+    assert_output --partial "--null requires a value"
+}
+
+@test "multiple --null flags all treated as null" {
+    local f="${TEST_TMPDIR}/multi_null.csv"
+    # Two rows — one with VAL1, one with VAL2 in the required name field
+    printf 'id,name,email,age\n1,VAL1,alice@example.com,30\n2,VAL2,bob@example.com,25\n' > "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null VAL1 --null VAL2
+    assert_failure 1
+    # Both rows should be invalid (null replaced in required field)
+    local invalid_count
+    invalid_count="$(tail -n +2 "${f}.invalid" | wc -l | tr -d ' ')"
+    [ "${invalid_count}" -eq 2 ]
+}
+
+@test "--null replaces the default set (default tokens are no longer treated as null)" {
+    local f="${TEST_TMPDIR}/default_override.csv"
+    # 'NULL' is in the built-in default set; with --null CUSTOM it should be ignored
+    printf 'id,name,email,age\n1,NULL,alice@example.com,30\n' > "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null CUSTOM
+    assert_success
+    assert_file_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+}
+
+@test "--null with regex special characters matches the literal string" {
+    local f="${TEST_TMPDIR}/regex_special.csv"
+    # 'foo.bar' contains a dot; it should match only the literal string, not 'fooXbar'
+    printf 'id,name,email,age\n1,foo.bar,alice@example.com,30\n2,fooXbar,foo@example.com,29\n' > "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null "foo.bar"
+    assert_failure 1
+    # One should be invalid (null replaced in required field)
+    local invalid_count
+    invalid_count="$(tail -n +2 "${f}.invalid" | wc -l | tr -d ' ')"
+    [ "${invalid_count}" -eq 1 ]
+    assert_file_exists "${f}.valid"
+}
+
+@test "--null does not replace a partial match" {
+    local f="${TEST_TMPDIR}/partial_custom_null.csv"
+    # 'SENTINEL_extra' should NOT be replaced when --null SENTINEL is used
+    printf 'id,name,email,age\n1,SENTINEL_extra,alice@example.com,30\n' > "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null SENTINEL
+    assert_success
+    assert_file_exists "${f}.valid"
+}
+
+@test "--null is case-insensitive" {
+    local f="${TEST_TMPDIR}/case_insenitive_null.csv"
+    # 'FoObAr', 'foobar', and 'FOOBAR' should be replaced when --null fooBAR is used
+    printf 'id,name,email,age\n1,FoObAr,a@b.com,24\n2,foobar,c@d.com,52\n3,FOOBAR,e@f.com,42\n4,valid,g@h.com,23\n' > "${f}"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --null fooBAR
+    assert_failure 1
+    # Three of four should be invalid (null replaced in required field)
+    local invalid_count
+    invalid_count="$(tail -n +2 "${f}.invalid" | wc -l | tr -d ' ')"
+    [ "${invalid_count}" -eq 3 ]
+    assert_file_exists "${f}.valid"
+}
