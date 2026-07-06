@@ -3,11 +3,10 @@
 # xsv-validate.sh — Normalize and validate a TSV/CSV file using qsv
 #
 # Usage:
-#   ./xsv-validate.sh <input_file> <schema.json> [options]
+#   ./xsv-validate.sh <input_file> -s <schema.json> -o <output_folder> [options]
 #
 # Arguments:
 #   <input_file>       Path to the CSV or TSV file to validate
-#   <schema.json>      Path to (or URL of) a JSONschema file
 #
 # Options:
 #   --comment CHAR     Comment character to strip (default: #)
@@ -15,7 +14,8 @@
 #   -h, --help         Show this help message
 #   --keep-temp        Keep intermediate temporary files for debugging
 #   --null STRING      String to treat as a null value (multiple allowed; default: common set of strings)
-#   -o, --output PATH  Relative path to output folder. Will be created if needed. (default: .)
+#   -o, --output PATH  Relative path to output folder. Will be created if needed. (REQUIRED)
+#   -s, --schema PATH  Relative file path for the JSONSchema file (REQUIRED)
 #   --skip-lines N     Number of header/preamble lines to skip (default: 0)
 #   --summary-file     Output a summary file for the validation (default: disabled)
 #
@@ -91,7 +91,7 @@ SKIP_LINES=0
 COMMENT_CHAR="#"
 DELIMITER=""      # empty = auto-detect
 KEEP_TEMP=0
-OUTPUT_PATH="."
+OUTPUT_PATH=""
 REGEX_NULL=""
 SUMMARY_FILE=0
 
@@ -105,21 +105,22 @@ while [[ $# -gt 0 ]]; do
             REGEX_NULL="${REGEX_NULL}$(regex_clean "${2:?'--null requires a value'}")|"
             shift 2 ;;
         -o|--output)       OUTPUT_PATH="${2:?'--output requires a value'}";    shift 2 ;;
+        -s|--schema)       SCHEMA="${2:?'--schema requires a value'}";         shift 2 ;;
         --skip-lines)      SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
-        -s|--summary-file) SUMMARY_FILE=1; shift ;;
+        --summary-file)    SUMMARY_FILE=1; shift ;;
         -*)                error "Unknown option: $1" ;;
         *)
             if   [[ -z "${INPUT_FILE}" ]]; then INPUT_FILE="$1"
-            elif [[ -z "${SCHEMA}"     ]]; then SCHEMA="$1"
             else error "Unexpected argument: $1"
             fi
             shift ;;
     esac
 done
 
-[[ -n "${INPUT_FILE}" ]] || error "No input file supplied. Run with --help for usage."
-[[ -n "${SCHEMA}"     ]] || error "No JSONschema supplied. Run with --help for usage."
-[[ -f "${INPUT_FILE}" ]] || error "Input file not found: ${INPUT_FILE}"
+[[ -n "${INPUT_FILE}"  ]] || error "No input file supplied. Run with --help for usage."
+[[ -n "${SCHEMA}"      ]] || error "No JSONschema supplied. Run with --help for usage."
+[[ -n "${OUTPUT_PATH}" ]] || error "No output path supplied. Run with --help for usage."
+[[ -f "${INPUT_FILE}"  ]] || error "Input file not found: ${INPUT_FILE}"
 
 # Schema may be a local file or a URL - only check existence for local paths
 if [[ "${SCHEMA}" != http* ]]; then
