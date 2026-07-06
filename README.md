@@ -20,15 +20,21 @@ CSV/TSV Validator CLI tool: Normalize and validate a TSV/CSV file using qsv
 
 #### Options:
 ```
-   --skip-lines N   Number of header/preamble lines to skip (default: 0)
-   --comment CHAR   Comment character to strip (default: #)
-   --delimiter SEP  Field delimiter: 'tab' or any single char (default: auto-detect)
-   --keep-temp      Keep intermediate temporary files for debugging
-   -h, --help       Show this help message
+  --comment CHAR     Comment character to strip (default: #)
+  --delimiter SEP    Field delimiter: 'tab' or any single char (default: auto-detect)
+  -h, --help         Show this help message
+  --keep-temp        Keep intermediate temporary files for debugging
+  --null STRING      String to treat as a null value (multiple allowed; default: common set of strings)
+  -o, --output PATH  Relative path to output folder. Will be created if needed. (default: .)
+  --skip-lines N     Number of header/preamble lines to skip (default: 0)
+  --summary-file     Output a summary file for the validation (default: disabled)
 ```
-#### Outputs (written alongside `<input_file>`):
+
+#### Outputs (written to output folder):
 ```
-   <input_file>.valid                 - Rows that passed validation
-   <input_file>.invalid               - Rows that failed validation
-   <input_file>.validation-errors.tsv - Detailed per-field error report
-```
+  <input_file>.valid                 - Rows that passed validation
+  <input_file>.invalid               - Rows that failed validation
+  <input_file>.validation-errors.tsv - Detailed per-field error report
+  <input_file>.summary.json          - Summary file for the validation
+  ```
+  
