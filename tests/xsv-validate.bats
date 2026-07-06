@@ -426,7 +426,7 @@ assert_null_token_replaced() {
 }
 
 @test "--null is case-insensitive" {
-    local f="${TEST_TMPDIR}/case_insenitive_null.csv"
+    local f="${TEST_TMPDIR}/case_insensitive_null.csv"
     # 'FoObAr', 'foobar', and 'FOOBAR' should be replaced when --null fooBAR is used
     printf 'id,name,email,age\n1,FoObAr,a@b.com,24\n2,foobar,c@d.com,52\n3,FOOBAR,e@f.com,42\n4,valid,g@h.com,23\n' > "${f}"
     run "${SCRIPT}" "${f}" "${SCHEMA}" --null fooBAR
