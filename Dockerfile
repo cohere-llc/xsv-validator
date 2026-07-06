@@ -25,8 +25,8 @@ RUN apt-get update \
 COPY . /xsv-validator/
 
 # clone bats helpers
-RUN git clone https://github.com/bats-core/bats-support /xsv-validator/tests/test_helper/bats-support \
-    && git clone https://github.com/bats-core/bats-assert /xsv-validator/tests/test_helper/bats-assert \
-    && git clone https://github.com/bats-core/bats-file /xsv-validator/tests/test_helper/bats-file
+RUN git clone --depth 1 https://github.com/bats-core/bats-support /xsv-validator/tests/test_helper/bats-support \
+    && git clone --depth 1 https://github.com/bats-core/bats-assert /xsv-validator/tests/test_helper/bats-assert \
+    && git clone --depth 1 https://github.com/bats-core/bats-file /xsv-validator/tests/test_helper/bats-file
 
 WORKDIR /xsv-validator
