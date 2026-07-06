@@ -362,6 +362,32 @@ assert_null_token_replaced() {
     assert_file_exists "${outdir}/valid.csv.valid"
 }
 
+@test "-o with input file in a subdirectory writes outputs flat into the output directory" {
+    local subdir="${TEST_TMPDIR}/subdir"
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${subdir}" "${outdir}"
+    cp "${FIXTURES}/valid.csv" "${subdir}/valid.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" subdir/valid.csv "${SCHEMA}" -o out
+    assert_success
+    # Output should be flat in out/, not nested as out/subdir/valid.csv.valid
+    assert_file_exists "${outdir}/valid.csv.valid"
+    assert_file_not_exists "${outdir}/subdir/valid.csv.valid"
+}
+
+@test "-o with input file in a nested subdirectory writes outputs flat into the output directory" {
+    local subdir="${TEST_TMPDIR}/a/b/c"
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${subdir}" "${outdir}"
+    cp "${FIXTURES}/mixed.csv" "${subdir}/mixed.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" a/b/c/mixed.csv "${SCHEMA}" -o out
+    assert_failure 1
+    assert_file_exists "${outdir}/mixed.csv.valid"
+    assert_file_exists "${outdir}/mixed.csv.invalid"
+    assert_file_not_exists "${outdir}/a/b/c/mixed.csv.valid"
+}
+
 # =============================================================================
 # 8. --null: user-provided null strings
 # =============================================================================

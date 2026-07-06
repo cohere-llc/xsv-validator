@@ -56,6 +56,7 @@ regex_clean() {
             '$') result="${result}\\\$" ;;
             '*') result="${result}\*" ;;
             '+') result="${result}\+" ;;
+            '?') result="${result}\?" ;;
             '(') result="${result}\(" ;;
             ')') result="${result}\)" ;;
             '[') result="${result}\[" ;;
@@ -260,7 +261,7 @@ set -e
 BASE="${INPUT_FILE}"
 if [[ "${OUTPUT_PATH}" != "." ]]; then
     mkdir -p "${OUTPUT_PATH}"
-    BASE="${OUTPUT_PATH}/${BASE}"
+    BASE="${OUTPUT_PATH}/${BASE##*/}"
 fi
 
 # copy out results
