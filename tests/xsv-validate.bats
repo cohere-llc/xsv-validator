@@ -576,4 +576,77 @@ assert_null_token_replaced() {
     assert_file_exists "${outdir}/valid.csv.summary.json"
 }
 
+# -----------------------------------------------------------------------------
+# summary.json output file paths
+# -----------------------------------------------------------------------------
+
+@test "summary.json contains valid_records_file field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"valid_records_file"'
+}
+
+@test "summary.json contains invalid_records_file field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"invalid_records_file"'
+}
+
+@test "summary.json contains errors_file field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"errors_file"'
+}
+
+@test "summary.json valid_records_file path points to an existing file" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    local valid_path
+    valid_path=$(python3 -c "import json; print(json.load(open('${f}.summary.json'))['valid_records_file'])")
+    assert_file_exists "${valid_path}"
+}
+
+@test "summary.json output file paths with -o flag all point to existing files" {
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    cp "${FIXTURES}/mixed.csv" "${TEST_TMPDIR}/mixed.csv"
+    cd "${TEST_TMPDIR}"
+    # mixed.csv produces all three output files
+    run "${SCRIPT}" mixed.csv "${SCHEMA}" --summary-file -o out
+    assert_failure 1
+    local summary="${outdir}/mixed.csv.summary.json"
+    local valid_path invalid_path errors_path
+    valid_path=$(python3 -c "import json; print(json.load(open('${summary}'))['valid_records_file'])")
+    invalid_path=$(python3 -c "import json; print(json.load(open('${summary}'))['invalid_records_file'])")
+    errors_path=$(python3 -c "import json; print(json.load(open('${summary}'))['errors_file'])")
+    assert_file_exists "${valid_path}"
+    assert_file_exists "${invalid_path}"
+    assert_file_exists "${errors_path}"
+}
+
+@test "summary.json output file paths are flat when input is in a subdirectory with -o flag" {
+    local subdir="${TEST_TMPDIR}/subdir"
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${subdir}" "${outdir}"
+    cp "${FIXTURES}/mixed.csv" "${subdir}/mixed.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" subdir/mixed.csv "${SCHEMA}" --summary-file -o out
+    assert_failure 1
+    local summary="${outdir}/mixed.csv.summary.json"
+    local valid_path invalid_path
+    valid_path=$(python3 -c "import json; print(json.load(open('${summary}'))['valid_records_file'])")
+    invalid_path=$(python3 -c "import json; print(json.load(open('${summary}'))['invalid_records_file'])")
+    errors_path=$(python3 -c "import json; print(json.load(open('${summary}'))['errors_file'])")
+    # The paths in the JSON must resolve to real files
+    assert_file_exists "${valid_path}"
+    assert_file_exists "${invalid_path}"
+    assert_file_exists "${errors_path}"
+    # And those files must live flat in out/, not mirroring the input subdirectory
+    assert_file_not_exists "${outdir}/subdir/mixed.csv.valid"
+}
+
 

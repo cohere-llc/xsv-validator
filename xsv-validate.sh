@@ -265,16 +265,22 @@ if [[ "${OUTPUT_PATH}" != "." ]]; then
 fi
 
 # copy out results
+INVALID_PATH=""
+ERRORS_PATH=""
 case "${VALIDATE_EXIT}" in
     0)
         src="${TMPDIR_WORK}/validated.csv"
         [[ -f "${src}" ]] && cp "${src}" "${BASE}.valid"
+        VALID_PATH="${BASE}.valid"
         ;;
     1)
         for ext in valid invalid "validation-errors.tsv"; do
             src="${TMPDIR_WORK}/validated.csv.${ext}"
             [[ -f "${src}" ]] && cp "${src}" "${BASE}.${ext}"
         done
+        VALID_PATH="${BASE}.valid"
+        INVALID_PATH="${BASE}.invalid"
+        ERRORS_PATH="${BASE}.validation-errors.tsv"
         ;;
 esac
 
@@ -294,7 +300,10 @@ if [[ "${SUMMARY_FILE:-0}" == "1" ]]; then
   "status_code": ${VALIDATE_EXIT},
   "status_message": "${STATUS_MESSAGE}",
   "valid_rows": ${VALID_COUNT},
-  "invalid_rows": ${INVALID_COUNT}
+  "invalid_rows": ${INVALID_COUNT},
+  "valid_records_file": "${VALID_PATH}",
+  "invalid_records_file": "${INVALID_PATH}",
+  "errors_file": "${ERRORS_PATH}"
 }
 EOF
 fi
@@ -309,9 +318,9 @@ case "${VALIDATE_EXIT}" in
         warn "    Valid rows   : ${VALID_COUNT}"
         warn "    Invalid rows : ${INVALID_COUNT}"
         info "Output files:"
-        info "    ${BASE}.valid"
-        info "    ${BASE}.invalid"
-        info "    ${BASE}.validation-errors.tsv"
+        info "    ${VALID_FILE}"
+        info "    ${INVALID_FILE}"
+        info "    ${ERRORS_FILE}"
         ;;
     *)
         error "qsv validate exited with unexpected code ${VALIDATE_EXIT}. Check schema and input."
