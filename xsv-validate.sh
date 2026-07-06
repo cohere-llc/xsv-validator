@@ -6,17 +6,18 @@
 #   ./xsv-validate.sh <input_file> <schema.json> [options]
 #
 # Arguments:
-#   <input_file>     Path to the CSV or TSV file to validate
-#   <schema.json>    Path to (or URL of) a JSONschema file
+#   <input_file>       Path to the CSV or TSV file to validate
+#   <schema.json>      Path to (or URL of) a JSONschema file
 #
 # Options:
-#   --skip-lines N   Number of header/preamble lines to skip (default: 0)
-#   --comment CHAR   Comment character to strip (default: #)
-#   --delimiter SEP  Field delimiter: 'tab' or any single char (default: auto-detect)
-#   --keep-temp      Keep intermediate temporary files for debugging
-#   -h, --help       Show this help message
+#   --comment CHAR     Comment character to strip (default: #)
+#   --delimiter SEP    Field delimiter: 'tab' or any single char (default: auto-detect)
+#   -h, --help         Show this help message
+#   --keep-temp        Keep intermediate temporary files for debugging
+#   -o, --output PATH  Relative path to output folder. Will be created if needed. (default: .)
+#   --skip-lines N     Number of header/preamble lines to skip (default: 0)
 #
-# Outputs (written alongside <input_file>):
+# Outputs (written to output folder):
 #   <input_file>.valid                 - Rows that passed validation
 #   <input_file>.invalid               - Rows that failed validation
 #   <input_file>.validation-errors.tsv - Detailed per-field error report
@@ -59,14 +60,16 @@ SKIP_LINES=0
 COMMENT_CHAR="#"
 DELIMITER=""      # empty = auto-detect
 KEEP_TEMP=0
+OUTPUT_PATH="."
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -h|--help)       usage 0 ;;
-        --skip-lines)    SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
         --comment)       COMMENT_CHAR="${2:?'--comment requires a value'}";  shift 2 ;;
         --delimiter)     DELIMITER="${2:?'--delimiter requires a value'}";   shift 2 ;;
+        -h|--help)       usage 0 ;;
         --keep-temp)     KEEP_TEMP=1; shift ;;
+        -o|--output)     OUTPUT_PATH="${2:?'--output requires a value'}";    shift 2 ;;
+        --skip-lines)    SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
         -*)              error "Unknown option: $1" ;;
         *)
             if   [[ -z "${INPUT_FILE}" ]]; then INPUT_FILE="$1"
@@ -85,6 +88,9 @@ done
 if [[ "${SCHEMA}" != http* ]]; then
     [[ -f "${SCHEMA}" ]] || error "Schema file not found: ${SCHEMA}"
 fi
+
+# strip trailing `/` from the output path
+while [[ "${OUTPUT_PATH}" == */ ]]; do OUTPUT_PATH="${OUTPUT_PATH%/}"; done
 
 # -----------------------------------------------------------------------------
 # resolve delimiter flag
@@ -201,6 +207,10 @@ set -e
 # -----------------------------------------------------------------------------
 
 BASE="${INPUT_FILE}"
+if [[ "${OUTPUT_PATH}" != "." ]]; then
+    mkdir -p "${OUTPUT_PATH}"
+    BASE="${OUTPUT_PATH}/${BASE}"
+fi
 
 # copy out results
 case "${VALIDATE_EXIT}" in

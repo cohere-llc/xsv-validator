@@ -317,3 +317,47 @@ assert_null_token_replaced() {
     assert_failure 1
     assert_file_contains "${f}.invalid" "id,name,email,age"
 }
+
+# =============================================================================
+# 8. --output / -o: custom output directory
+# =============================================================================
+
+@test "-o writes output files to the specified directory" {
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    cp "${FIXTURES}/valid.csv" "${TEST_TMPDIR}/valid.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" valid.csv "${SCHEMA}" -o out
+    assert_success
+    assert_file_exists "${outdir}/valid.csv.valid"
+}
+
+@test "--output long form writes output files to the specified directory" {
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    cp "${FIXTURES}/valid.csv" "${TEST_TMPDIR}/valid.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" valid.csv "${SCHEMA}" --output out
+    assert_success
+    assert_file_exists "${outdir}/valid.csv.valid"
+}
+
+@test "-o creates the output directory when it does not exist" {
+    local outdir="${TEST_TMPDIR}/new-dir"
+    cp "${FIXTURES}/valid.csv" "${TEST_TMPDIR}/valid.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" valid.csv "${SCHEMA}" -o new-dir
+    assert_success
+    assert_dir_exists "${outdir}"
+    assert_file_exists "${outdir}/valid.csv.valid"
+}
+
+@test "-o with trailing slashes still writes to the correct directory" {
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    cp "${FIXTURES}/valid.csv" "${TEST_TMPDIR}/valid.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" valid.csv "${SCHEMA}" -o "out///"
+    assert_success
+    assert_file_exists "${outdir}/valid.csv.valid"
+}
