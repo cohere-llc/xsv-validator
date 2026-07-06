@@ -59,8 +59,8 @@ regex_clean() {
             '?') result="${result}\?" ;;
             '(') result="${result}\(" ;;
             ')') result="${result}\)" ;;
-            '[') result="${result}\[" ;;
-            '{') result="${result}\{" ;;
+            '[') result="${result}\[" ;; # closing bracket not escaped outside of blocks
+            '{') result="${result}\{" ;; # closing bracket not escaped outside of blocks
             '\') result="${result}\\\\" ;;
             '|') result="${result}\|" ;;
             *) result="${result}${temp:$i:1}"
