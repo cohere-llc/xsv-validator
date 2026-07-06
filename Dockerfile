@@ -16,6 +16,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bats \
         git \
+        python3 \
         qsv \
         vim \
     && apt-get clean \

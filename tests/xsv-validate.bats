@@ -34,7 +34,7 @@ setup() {
 
 teardown() {
     # Remove output artefacts written next to every input file used in the test
-    for ext in valid invalid validation-errors.tsv; do
+    for ext in valid invalid validation-errors.tsv summary.json; do
         rm -f "${TEST_TMPDIR}/"*".${ext}"
     done
     rm -rf "${TEST_TMPDIR}"
@@ -437,3 +437,117 @@ assert_null_token_replaced() {
     [ "${invalid_count}" -eq 3 ]
     assert_file_exists "${f}.valid"
 }
+
+# =============================================================================
+# 9. -s, --summary-file: output JSON summary file
+# =============================================================================
+
+@test "--summary-file produces a .summary.json file" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_exists "${f}.summary.json"
+}
+
+@test "-s is a short-form alias for --summary-file" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" -s
+    assert_success
+    assert_file_exists "${f}.summary.json"
+}
+
+@test "without --summary-file no .summary.json is created" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}"
+    assert_success
+    assert_file_not_exists "${f}.summary.json"
+}
+
+@test "summary.json contains status_code field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"status_code"'
+}
+
+@test "summary.json contains status_message field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"status_message"'
+}
+
+@test "summary.json contains valid_rows field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"valid_rows"'
+}
+
+@test "summary.json contains invalid_rows field" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"invalid_rows"'
+}
+
+@test "summary.json is valid JSON" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    run python3 -c "import json, sys; json.load(open('${f}.summary.json'))"
+    assert_success
+}
+
+@test "summary.json status_code is 0 when all rows are valid" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    assert_file_contains "${f}.summary.json" '"status_code": 0'
+}
+
+@test "summary.json status_code is 1 when some rows fail validation" {
+    local f; f="$(copy_fixture mixed.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_failure 1
+    assert_file_contains "${f}.summary.json" '"status_code": 1'
+}
+
+@test "summary.json row counts are correct for all-valid input" {
+    local f; f="$(copy_fixture valid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_success
+    # valid.csv has 2 data rows
+    assert_file_contains "${f}.summary.json" '"valid_rows": 2'
+    assert_file_contains "${f}.summary.json" '"invalid_rows": 0'
+}
+
+@test "summary.json row counts are correct for mixed input" {
+    local f; f="$(copy_fixture mixed.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_failure 1
+    # mixed.csv has 1 valid and 1 invalid row
+    assert_file_contains "${f}.summary.json" '"valid_rows": 1'
+    assert_file_contains "${f}.summary.json" '"invalid_rows": 1'
+}
+
+@test "summary.json row counts are correct for all-invalid input" {
+    local f; f="$(copy_fixture invalid.csv)"
+    run "${SCRIPT}" "${f}" "${SCHEMA}" --summary-file
+    assert_failure 1
+    # invalid.csv has 2 invalid rows
+    assert_file_contains "${f}.summary.json" '"valid_rows": 0'
+    assert_file_contains "${f}.summary.json" '"invalid_rows": 2'
+}
+
+@test "--summary-file with -o writes the summary to the output directory" {
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    cp "${FIXTURES}/valid.csv" "${TEST_TMPDIR}/valid.csv"
+    cd "${TEST_TMPDIR}"
+    run "${SCRIPT}" valid.csv "${SCHEMA}" --summary-file -o out
+    assert_success
+    assert_file_exists "${outdir}/valid.csv.summary.json"
+}
+
+

@@ -17,11 +17,13 @@
 #   --null STRING      String to treat as a null value (multiple allowed; default: common set of strings)
 #   -o, --output PATH  Relative path to output folder. Will be created if needed. (default: .)
 #   --skip-lines N     Number of header/preamble lines to skip (default: 0)
+#   --summary-file     Output a summary file for the validation (default: disabled)
 #
 # Outputs (written to output folder):
 #   <input_file>.valid                 - Rows that passed validation
 #   <input_file>.invalid               - Rows that failed validation
 #   <input_file>.validation-errors.tsv - Detailed per-field error report
+#   <input_file>.summary.json          - Summary file for the validation
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -66,6 +68,12 @@ regex_clean() {
     echo "${result}"
 }
 
+count_rows() {
+    local f="$1"
+    [[ -f "${f}" ]] || { echo "0"; return; }
+    tail -n +2 "${f}" | wc -l | tr -d ' '
+}
+
 # -----------------------------------------------------------------------------
 # dependency check
 # -----------------------------------------------------------------------------
@@ -84,19 +92,21 @@ DELIMITER=""      # empty = auto-detect
 KEEP_TEMP=0
 OUTPUT_PATH="."
 REGEX_NULL=""
+SUMMARY_FILE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --comment)       COMMENT_CHAR="${2:?'--comment requires a value'}";  shift 2 ;;
-        --delimiter)     DELIMITER="${2:?'--delimiter requires a value'}";   shift 2 ;;
-        -h|--help)       usage 0 ;;
-        --keep-temp)     KEEP_TEMP=1; shift ;;
+        --comment)         COMMENT_CHAR="${2:?'--comment requires a value'}";  shift 2 ;;
+        --delimiter)       DELIMITER="${2:?'--delimiter requires a value'}";   shift 2 ;;
+        -h|--help)         usage 0 ;;
+        --keep-temp)       KEEP_TEMP=1; shift ;;
         --null)
             REGEX_NULL="${REGEX_NULL}$(regex_clean "${2:?'--null requires a value'}")|"
             shift 2 ;;
-        -o|--output)     OUTPUT_PATH="${2:?'--output requires a value'}";    shift 2 ;;
-        --skip-lines)    SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
-        -*)              error "Unknown option: $1" ;;
+        -o|--output)       OUTPUT_PATH="${2:?'--output requires a value'}";    shift 2 ;;
+        --skip-lines)      SKIP_LINES="${2:?'--skip-lines requires a value'}"; shift 2 ;;
+        -s|--summary-file) SUMMARY_FILE=1; shift ;;
+        -*)                error "Unknown option: $1" ;;
         *)
             if   [[ -z "${INPUT_FILE}" ]]; then INPUT_FILE="$1"
             elif [[ -z "${SCHEMA}"     ]]; then SCHEMA="$1"
@@ -260,14 +270,33 @@ case "${VALIDATE_EXIT}" in
         ;;
 esac
 
+case "${VALIDATE_EXIT}" in
+    0)  STATUS_MESSAGE="All records are VALID." ;;
+    1)  STATUS_MESSAGE="Validation complete with errors." ;;
+    *)  STATUS_MESSAGE="qsv validate exited with unexpected code ${VALIDATE_EXIT}. Check schema and input." ;;
+esac
+
+VALID_COUNT=$(count_rows "${BASE}.valid")
+INVALID_COUNT=$(count_rows "${BASE}.invalid")
+
+if [[ "${SUMMARY_FILE:-0}" == "1" ]]; then
+    # write a JSON summary file with validation stats
+    cat << EOF > "${BASE}.summary.json"
+{
+  "status_code": ${VALIDATE_EXIT},
+  "status_message": "${STATUS_MESSAGE}",
+  "valid_rows": ${VALID_COUNT},
+  "invalid_rows": ${INVALID_COUNT}
+}
+EOF
+fi
+
 echo ""
 case "${VALIDATE_EXIT}" in
     0)
         info "✅  All records are VALID."
         ;;
     1)
-        INVALID_COUNT=$(qsv count "${BASE}.invalid" 2>/dev/null || echo "?")
-        VALID_COUNT=$(qsv count "${BASE}.valid"   2>/dev/null || echo "?")
         warn "⚠️   Validation complete with errors."
         warn "    Valid rows   : ${VALID_COUNT}"
         warn "    Invalid rows : ${INVALID_COUNT}"
