@@ -204,7 +204,7 @@ if [[ ${FILL_HEADER:-0} == "1" ]]; then
     if [[ -z "${HEADER}" ]]; then
         error "Could not extract header info from schema file ${SCHEMA}"
     fi
-    echo "${HEADER}" | cat - "${INPUT_FILE}" > "${TMPDIR_WORK}/${INPUT_FILE##*/}"
+printf '%s\n' "${HEADER}" | cat - "${INPUT_FILE}" > "${TMPDIR_WORK}/${INPUT_FILE##*/}"
     WORK_FILE="${TMPDIR_WORK}/${INPUT_FILE##*/}"
 fi
 
