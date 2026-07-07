@@ -13,7 +13,7 @@
 #   --delimiter SEP    Field delimiter: 'tab' or any single char (default: auto-detect)
 #   -h, --help         Show this help message
 #   --keep-temp        Keep intermediate temporary files for debugging
-#   --missing-header   Indicates the csv file lacks a header. The schema will be used to create one.
+#   --missing-header   Indicates the input file lacks a header row. The schema will be used to create one.
 #   --null STRING      String to treat as a null value (multiple allowed; default: common set of strings)
 #   -o, --output PATH  Relative path to output folder. Will be created if needed. (REQUIRED)
 #   -s, --schema PATH  Relative file path for the JSONSchema file (REQUIRED)
