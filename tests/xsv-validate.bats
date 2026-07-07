@@ -720,8 +720,8 @@ assert_null_token_replaced() {
 
 @test "--missing-header reads remote schema" {
     local f; f="$(copy_fixture valid_without_header.csv)"
-    local schema="https://github.com/cohere-llc/xsv-validator/blob/56b041389427d36d86d925165f0ce41e193aa245/tests/fixtures/schema.json"
-    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    local schema="https://raw.githubusercontent.com/cohere-llc/xsv-validator/56b041389427d36d86d925165f0ce41e193aa245/tests/fixtures/schema.json"
+    run "${SCRIPT}" "${f}" -s "${schema}" -o "." --missing-header
     assert_success
     assert_file_exists "${f}.valid"
     assert_file_contains "${f}.valid" "id,name,email,age"
