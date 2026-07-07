@@ -30,7 +30,7 @@ setup() {
 
     # Each test gets its own isolated temp dir; files are copied in per-test
     export TEST_TMPDIR="$(mktemp -d)"
-    cd $TEST_TMPDIR
+    cd "${TEST_TMPDIR}"
 }
 
 teardown() {
