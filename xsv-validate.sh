@@ -77,18 +77,24 @@ count_rows() {
 }
 
 extract_header() {
-    local file="$1" sep="$2"
-    python3 << END
+    local file="$1" sep="${2:-,}"
+    python3 - "$file" "$sep" <<'PY'
 import json
-with open("${file}") as f:
-    d = json.load(f)
-    try:
-        cols = [key for key in d["properties"]]
-        print(*cols, sep='${sep:-,}')
-    except Exception:
-        # print no data to indicate a parsing error
-        pass
-END
+import sys
+
+file = sys.argv[1]
+sep = sys.argv[2] or ','
+
+try:
+    with open(file, encoding='utf-8') as f:
+        d = json.load(f)
+    props = d.get('properties')
+    if isinstance(props, dict):
+        sys.stdout.write(sep.join(props.keys()))
+except Exception:
+    # Print nothing to indicate a parsing/reading error
+    pass
+PY
 }
 
 # -----------------------------------------------------------------------------
