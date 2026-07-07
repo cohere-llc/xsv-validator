@@ -13,6 +13,7 @@
 #   --delimiter SEP    Field delimiter: 'tab' or any single char (default: auto-detect)
 #   -h, --help         Show this help message
 #   --keep-temp        Keep intermediate temporary files for debugging
+#   --missing-header   Indicates the input file lacks a header row. The schema will be used to create one.
 #   --null STRING      String to treat as a null value (multiple allowed; default: common set of strings)
 #   -o, --output PATH  Relative path to output folder. Will be created if needed. (REQUIRED)
 #   -s, --schema PATH  Relative file path for the JSONSchema file (REQUIRED)
@@ -75,6 +76,27 @@ count_rows() {
     tail -n +2 "${f}" | wc -l | tr -d ' '
 }
 
+extract_header() {
+    local file="$1" sep="${2:-,}"
+    python3 - "$file" "$sep" <<'PY'
+import json
+import sys
+
+file = sys.argv[1]
+sep = f'"{sys.argv[2]}"' or '","'
+
+try:
+    with open(file, encoding='utf-8') as f:
+        d = json.load(f)
+    props = d.get('properties')
+    if isinstance(props, dict):
+        sys.stdout.write(f'"{sep.join(props.keys())}"')
+except Exception:
+    # Print nothing to indicate a parsing/reading error
+    pass
+PY
+}
+
 # -----------------------------------------------------------------------------
 # dependency check
 # -----------------------------------------------------------------------------
@@ -94,6 +116,7 @@ KEEP_TEMP=0
 OUTPUT_PATH=""
 REGEX_NULL=""
 SUMMARY_FILE=0
+FILL_HEADER=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -101,6 +124,7 @@ while [[ $# -gt 0 ]]; do
         --delimiter)       DELIMITER="${2:?'--delimiter requires a value'}";   shift 2 ;;
         -h|--help)         usage 0 ;;
         --keep-temp)       KEEP_TEMP=1; shift ;;
+        --missing-header)  FILL_HEADER=1; shift ;;
         --null)
             REGEX_NULL="${REGEX_NULL}$(regex_clean "${2:?'--null requires a value'}")|"
             shift 2 ;;
@@ -141,6 +165,7 @@ DELIM_FLAG=()
 if [[ -n "${DELIMITER}" ]]; then
     if [[ "${DELIMITER}" == "tab" || "${DELIMITER}" == $'\t' ]]; then
         DELIM_FLAG=(--delimiter $'\t')
+        DELIMITER=$'\t'
     else
         DELIM_FLAG=(--delimiter "${DELIMITER}")
     fi
@@ -148,6 +173,7 @@ else
     # Auto-detect: treat .tsv files as tab-delimited; otherwise sniff via qsv
     if [[ "${INPUT_FILE,,}" == *.tsv ]]; then
         DELIM_FLAG=(--delimiter $'\t')
+        DELIMITER=$'\t'
     fi
     # If still empty, qsv will default to comma — fine for .csv
 fi
@@ -162,6 +188,26 @@ NORMALIZED="${TMPDIR_WORK}/normalized.csv"
 info "Input file : ${INPUT_FILE}"
 info "Schema     : ${SCHEMA}"
 info "Temp dir   : ${TMPDIR_WORK}"
+
+# -----------------------------------------------------------------------------
+# fill missing header
+# -----------------------------------------------------------------------------
+WORK_FILE="${INPUT_FILE}"
+if [[ ${FILL_HEADER:-0} == "1" ]]; then
+    if [[ "${SCHEMA}" == http* ]]; then
+        command -v curl &>/dev/null || error "curl is required to download remote schemas (install curl or provide a local schema file)"
+        local_schema="${TMPDIR_WORK}/schema.json"
+        curl -fsSL "${SCHEMA}" -o "${local_schema}" \
+            || error "Failed to download schema from: ${SCHEMA}"
+        SCHEMA="${local_schema}"
+    fi
+    HEADER=$(extract_header "${SCHEMA}" "${DELIMITER}")
+    if [[ -z "${HEADER}" ]]; then
+        error "Could not extract header info from schema file ${SCHEMA}"
+    fi
+printf '%s\n' "${HEADER}" | cat - "${INPUT_FILE}" > "${TMPDIR_WORK}/${INPUT_FILE##*/}"
+    WORK_FILE="${TMPDIR_WORK}/${INPUT_FILE##*/}"
+fi
 
 # -----------------------------------------------------------------------------
 # STEP 1: Normalize with qsv input
@@ -188,7 +234,7 @@ qsv input \
     --trim-fields \
     --encoding-errors replace \
     "${SKIP_FLAG[@]}" \
-    "${INPUT_FILE}" \
+    "${WORK_FILE}" \
     --output "${NORMALIZED}"
 
 info "           -> wrote $(qsv count "${NORMALIZED}") data rows to normalized file"
@@ -259,13 +305,11 @@ set -e
 # collect and report results
 # -----------------------------------------------------------------------------
 
-BASE="${INPUT_FILE}"
-if [[ "${OUTPUT_PATH}" != "." ]]; then
-    mkdir -p "${OUTPUT_PATH}"
-    BASE="${OUTPUT_PATH}/${BASE##*/}"
-fi
+mkdir -p "${OUTPUT_PATH}"
+BASE="${OUTPUT_PATH}/${WORK_FILE##*/}"
 
 # copy out results
+VALID_PATH=""
 INVALID_PATH=""
 ERRORS_PATH=""
 case "${VALIDATE_EXIT}" in
@@ -313,15 +357,18 @@ echo ""
 case "${VALIDATE_EXIT}" in
     0)
         info "✅  All records are VALID."
+        warn "    Valid rows   : ${VALID_COUNT}"
+        info "Output files:"
+        info "    ${VALID_PATH}"
         ;;
     1)
-        warn "⚠️   Validation complete with errors."
+        warn "⚠️  Validation complete with errors."
         warn "    Valid rows   : ${VALID_COUNT}"
         warn "    Invalid rows : ${INVALID_COUNT}"
         info "Output files:"
-        info "    ${VALID_FILE}"
-        info "    ${INVALID_FILE}"
-        info "    ${ERRORS_FILE}"
+        info "    ${VALID_PATH}"
+        info "    ${INVALID_PATH}"
+        info "    ${ERRORS_PATH}"
         ;;
     *)
         error "qsv validate exited with unexpected code ${VALIDATE_EXIT}. Check schema and input."

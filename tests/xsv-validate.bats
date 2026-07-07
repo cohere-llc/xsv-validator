@@ -13,6 +13,7 @@ setup_file() {
     export SCRIPT="${REPO_ROOT}/xsv-validate.sh"
     export FIXTURES="${TESTS_DIR}/fixtures"
     export SCHEMA="${FIXTURES}/schema.json"
+    export SCHEMA_WITH_COMMA="${FIXTURES}/schema_with_comma.json"
 
     # Ensure qsv is available
     if ! command -v qsv &>/dev/null; then
@@ -30,6 +31,7 @@ setup() {
 
     # Each test gets its own isolated temp dir; files are copied in per-test
     export TEST_TMPDIR="$(mktemp -d)"
+    cd "${TEST_TMPDIR}"
 }
 
 teardown() {
@@ -649,4 +651,89 @@ assert_null_token_replaced() {
     assert_file_not_exists "${outdir}/subdir/mixed.csv.valid"
 }
 
+# -----------------------------------------------------------------------------
+# csv missing header
+# -----------------------------------------------------------------------------
 
+@test "exits 0 and produces .valid file when valid file lacks header" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    assert_success
+    assert_file_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+    assert_file_not_exists "${f}.validation-errors.tsv"
+}
+
+@test "--missing-header injects schema field names as the header row in .valid output" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    assert_success
+    assert_file_contains "${f}.valid" "id,name,email,age"
+}
+
+@test "--missing-header with invalid data produces .invalid and .validation-errors.tsv" {
+    local f="${TEST_TMPDIR}/invalid_without_header.csv"
+    # age field is not numeric — fails schema pattern constraint
+    printf '1,Alice,alice@example.com,not-a-number\n' > "${f}"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    assert_failure 1
+    assert_file_exists "${f}.invalid"
+    assert_file_exists "${f}.validation-errors.tsv"
+}
+
+@test "--missing-header does not modify the original input file" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    local before after
+    before="$(cat "${f}")"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    assert_success
+    after="$(cat "${f}")"
+    [ "${before}" = "${after}" ]
+}
+
+@test "--missing-header with -o writes output to the specified directory" {
+    local outdir="${TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "${outdir}" --missing-header
+    assert_success
+    assert_file_exists "${outdir}/valid_without_header.csv.valid"
+}
+
+@test "--missing-header with a TSV file correctly injects the header" {
+    local f="${TEST_TMPDIR}/no_header.tsv"
+    printf '1\tAlice\talice@example.com\t30\n2\tBob\tbob@example.com\t25\n' > "${f}"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    assert_success
+    assert_file_exists "${f}.valid"
+    # qsv normalizes all output to CSV, so the header is comma-separated in the output
+    assert_file_contains "${f}.valid" "id,name,email,age"
+}
+
+@test "--missing-header exits with error when schema has no properties key" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    local bad_schema="${TEST_TMPDIR}/no_props.json"
+    printf '{"type": "object"}' > "${bad_schema}"
+    run "${SCRIPT}" "${f}" -s "${bad_schema}" -o "." --missing-header
+    assert_failure
+    assert_output --partial "Could not extract header info"
+}
+
+@test "--missing-header reads remote schema" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    local schema="https://raw.githubusercontent.com/cohere-llc/xsv-validator/56b041389427d36d86d925165f0ce41e193aa245/tests/fixtures/schema.json"
+    run "${SCRIPT}" "${f}" -s "${schema}" -o "." --missing-header
+    assert_success
+    assert_file_exists "${f}.valid"
+    assert_file_contains "${f}.valid" "id,name,email,age"
+}
+
+@test "--missing-header generates valid header when column name contains delimiter" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA_WITH_COMMA}" -o "." --missing-header
+    assert_success
+    assert_file_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+    assert_file_not_exists "${f}.validation-errors.tsv"
+    assert_file_contains "${f}.valid" "id,name,email,\"age,approx\""
+}
