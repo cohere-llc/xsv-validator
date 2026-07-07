@@ -195,10 +195,11 @@ info "Temp dir   : ${TMPDIR_WORK}"
 WORK_FILE="${INPUT_FILE}"
 if [[ ${FILL_HEADER:-0} == "1" ]]; then
     if [[ "${SCHEMA}" == http* ]]; then
+        command -v curl &>/dev/null || error "curl is required to download remote schemas (install curl or provide a local schema file)"
         local_schema="${TMPDIR_WORK}/schema.json"
         curl -fsSL "${SCHEMA}" -o "${local_schema}" \
             || error "Failed to download schema from: ${SCHEMA}"
-        SCHEMA=${local_schema}
+        SCHEMA="${local_schema}"
     fi
     HEADER=$(extract_header "${SCHEMA}" "${DELIMITER}")
     if [[ -z "${HEADER}" ]]; then
