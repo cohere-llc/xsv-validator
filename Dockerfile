@@ -15,6 +15,7 @@ RUN wget -O /tmp/qsv-deb.gpg https://dathere.github.io/qsv-deb-releases/qsv-deb.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bats \
+        curl \
         git \
         python3 \
         qsv \

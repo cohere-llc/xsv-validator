@@ -718,4 +718,11 @@ assert_null_token_replaced() {
     assert_output --partial "Could not extract header info"
 }
 
-
+@test "--missing-header reads remote schema" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    local schema="https://github.com/cohere-llc/xsv-validator/blob/56b041389427d36d86d925165f0ce41e193aa245/tests/fixtures/schema.json"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA}" -o "." --missing-header
+    assert_success
+    assert_file_exists "${f}.valid"
+    assert_file_contains "${f}.valid" "id,name,email,age"
+}
