@@ -83,14 +83,14 @@ import json
 import sys
 
 file = sys.argv[1]
-sep = sys.argv[2] or ','
+sep = f'"{sys.argv[2]}"' or '","'
 
 try:
     with open(file, encoding='utf-8') as f:
         d = json.load(f)
     props = d.get('properties')
     if isinstance(props, dict):
-        sys.stdout.write(sep.join(props.keys()))
+        sys.stdout.write(f'"{sep.join(props.keys())}"')
 except Exception:
     # Print nothing to indicate a parsing/reading error
     pass

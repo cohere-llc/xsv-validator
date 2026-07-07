@@ -13,6 +13,7 @@ setup_file() {
     export SCRIPT="${REPO_ROOT}/xsv-validate.sh"
     export FIXTURES="${TESTS_DIR}/fixtures"
     export SCHEMA="${FIXTURES}/schema.json"
+    export SCHEMA_WITH_COMMA="${FIXTURES}/schema_with_comma.json"
 
     # Ensure qsv is available
     if ! command -v qsv &>/dev/null; then
@@ -725,4 +726,14 @@ assert_null_token_replaced() {
     assert_success
     assert_file_exists "${f}.valid"
     assert_file_contains "${f}.valid" "id,name,email,age"
+}
+
+@test "--missing-header generates valid header when column name contains delimiter" {
+    local f; f="$(copy_fixture valid_without_header.csv)"
+    run "${SCRIPT}" "${f}" -s "${SCHEMA_WITH_COMMA}" -o "." --missing-header
+    assert_success
+    assert_file_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+    assert_file_not_exists "${f}.validation-errors.tsv"
+    assert_file_contains "${f}.valid" "id,name,email,\"age,approx\""
 }
