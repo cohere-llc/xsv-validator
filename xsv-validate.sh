@@ -292,11 +292,13 @@ info "Step 3/3: Validating against schema: ${SCHEMA}..."
 
 # first, validate the schema itself
 set +e
-qsv validate schema "${SCHEMA}" 2>&1
+SCHEMA_VALIDATE_OUT="$(qsv validate schema "${SCHEMA}" 2>&1)"
 SCHEMA_EXIT=$?
 set -e
-if [[ "${SCHEMA_EXIT}" != "0" ]]; then
-    error "Schema validation failed for ${SCHEMA} with error code ${SCHEMA_EXIT}."
+if (( SCHEMA_EXIT != 0 )); then
+    printf '\033[1;31m[ERROR]\033[0m %s\n' "Schema validation failed for ${SCHEMA} (exit ${SCHEMA_EXIT})." >&2
+    printf '%s\n' "${SCHEMA_VALIDATE_OUT}" >&2
+    exit "${SCHEMA_EXIT}"
 fi
 
 VALIDATE_OUT="${TMPDIR_WORK}/validated.csv"
