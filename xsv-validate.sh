@@ -290,6 +290,15 @@ info "           -> null replacement complete"
 
 info "Step 3/3: Validating against schema: ${SCHEMA}..."
 
+# first, validate the schema itself
+set +e
+qsv validate schema "${SCHEMA}" 2>&1
+SCHEMA_EXIT=$?
+set -e
+if [[ "${SCHEMA_EXIT}" != "0" ]]; then
+    error "Schema validation failed for ${SCHEMA} with error code ${SCHEMA_EXIT}."
+fi
+
 VALIDATE_OUT="${TMPDIR_WORK}/validated.csv"
 cp "${NULL_REPLACED}" "${VALIDATE_OUT}"
 # qsv validate exit codes: 0 = all valid, 1 = some invalid, other = error
