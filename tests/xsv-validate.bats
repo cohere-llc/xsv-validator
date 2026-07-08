@@ -737,3 +737,52 @@ assert_null_token_replaced() {
     assert_file_not_exists "${f}.validation-errors.tsv"
     assert_file_contains "${f}.valid" "id,name,email,\"age,approx\""
 }
+
+# -----------------------------------------------------------------------------
+# JSONSchema validation
+# -----------------------------------------------------------------------------
+
+@test "exits with error when schema file is not valid JSON" {
+    local f; f="$(copy_fixture valid.csv)"
+    local bad_schema="${TEST_TMPDIR}/bad_schema.json"
+    printf '{ this is not valid json }' > "${bad_schema}"
+    run "${SCRIPT}" "${f}" -s "${bad_schema}" -o "."
+    assert_failure
+    assert_output --partial "Schema validation failed"
+    assert_file_not_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+}
+
+@test "exits with error when schema file is valid JSON but not a valid JSONSchema" {
+    local f; f="$(copy_fixture valid.csv)"
+    local bad_schema="${TEST_TMPDIR}/bad_schema.json"
+    # 'properties' must be an object, not a string
+    printf '{"type": "object", "properties": "not_an_object"}' > "${bad_schema}"
+    run "${SCRIPT}" "${f}" -s "${bad_schema}" -o "."
+    assert_failure
+    assert_output --partial "Schema validation failed"
+    assert_file_not_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+}
+
+@test "schema validation error does not produce output files" {
+    local f; f="$(copy_fixture valid.csv)"
+    local bad_schema="${TEST_TMPDIR}/bad_schema.json"
+    printf '{ not valid json at all' > "${bad_schema}"
+    run "${SCRIPT}" "${f}" -s "${bad_schema}" -o "."
+    assert_failure
+    assert_output --partial "Schema validation failed"
+    assert_file_not_exists "${f}.valid"
+    assert_file_not_exists "${f}.invalid"
+    assert_file_not_exists "${f}.validation-errors.tsv"
+}
+
+@test "schema validation error message includes the schema file path" {
+    local f; f="$(copy_fixture valid.csv)"
+    local bad_schema="${TEST_TMPDIR}/bad_schema.json"
+    printf '{ not valid json }' > "${bad_schema}"
+    run "${SCRIPT}" "${f}" -s "${bad_schema}" -o "."
+    assert_failure
+    assert_output --partial "${bad_schema}"
+}
+
