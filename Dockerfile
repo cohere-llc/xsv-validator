@@ -2,26 +2,31 @@ FROM ubuntu:24.04
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        gpg \
-        wget \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN wget -O /tmp/qsv-deb.gpg https://dathere.github.io/qsv-deb-releases/qsv-deb.gpg \
-    && gpg --dearmor -o /usr/share/keyrings/qsv-deb.gpg /tmp/qsv-deb.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/qsv-deb.gpg] https://dathere.github.io/qsv-deb-releases ./" | tee /etc/apt/sources.list.d/qsv.list
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
         bats \
+        build-essential \
+        ca-certificates \
         curl \
         git \
+        libssl-dev \
+        pkg-config \
         python3 \
-        qsv \
         vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Build qsv from a specific unreleased commit
+# Update after the --split-ragged option is included in a release
+ARG QSV_COMMIT=d0270f0933db0264bfdf0c35abe9e97a01abd3dc
+RUN git clone https://github.com/dathere/qsv /tmp/qsv \
+    && cd /tmp/qsv \
+    && git checkout ${QSV_COMMIT} \
+    && cargo build --release --locked --features feature_capable \
+    && cp target/release/qsv /usr/local/bin/qsv \
+    && rm -rf /tmp/qsv ~/.cargo/registry ~/.cargo/git
 
 COPY . /xsv-validator/
 
